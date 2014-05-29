@@ -15,7 +15,7 @@ void array_decref(ArrayObj* o) {
     printf("* array_decref change refcount from %d to %d\n",
             o->refcount, o->refcount-1);
     o->refcount--;
-    if ((o->refcount <0) && (o->data != NULL)) {
+    if ((o->refcount <= 0) && (o->data != NULL)) {
         printf("* array_decref: free memory\n");
         free(o->data);
     }
