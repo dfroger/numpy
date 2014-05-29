@@ -8,6 +8,8 @@
 #include "stdio.h"
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
+#include "arrayobj.h"
+#include "stdio.h"
 %}
 
 /**********************************************************************/
@@ -138,6 +140,13 @@
   {
     void* array = (void*) PyCapsule_GetPointer(cap,SWIGPY_CAPSULE_NAME);
     if (array != NULL) free(array);
+  }
+
+  void free_cap_refcount(PyObject * cap)
+  {
+      ArrayObj* o = (ArrayObj*) PyCapsule_GetPointer(cap,SWIGPY_CAPSULE_NAME);
+      printf("free_cap_refcount\n");
+      array_decref(o);
   }
 %#endif
 
@@ -3038,7 +3047,51 @@
   $result = SWIG_Python_AppendOutput($result,obj);
 }
 
+
 %enddef    /* %numpy_typemaps() macro */
+
+
+
+
+/* Typemap suite for array with reference count */
+%typemap(in,numinputs=0)
+    (ArrayObj** o, int* size)
+    (ArrayObj*  o_temp = NULL  , int  dim_temp)
+{
+  $1 = &o_temp;
+  $2 = &dim_temp;
+}
+
+%typemap(argout,
+         fragment="NumPy_Backward_Compatibility,NumPy_Utilities")
+    (ArrayObj** o, int* size)
+{
+  npy_intp dims[1] = { *$2 };
+  PyObject* obj = PyArray_SimpleNewFromData(1,dims,NPY_DOUBLE,(void*)((*$1)->data));
+  PyArrayObject* array = (PyArrayObject *) obj;
+
+  if (!array) SWIG_fail;
+
+  printf("argout typemap: array_incref\n");
+  array_incref(*$1);
+
+%#ifdef SWIGPY_USE_CAPSULE
+    PyObject* cap = PyCapsule_New((void*)(*$1), SWIGPY_CAPSULE_NAME, free_cap_refcount);
+%#else
+    PyObject* cap = PyCObject_FromVoidPtr((void*)(*$1), free_cap_refcount);
+%#endif
+
+%#if NPY_API_VERSION < 0x00000007
+  PyArray_BASE(array) = cap;
+%#else
+  PyArray_SetBaseObject(array,cap);
+%#endif
+
+  $result = SWIG_Python_AppendOutput($result,obj);
+}
+
+
+
 /* *************************************************************** */
 
 /* Concrete instances of the %numpy_typemaps() macro: Each invocation
